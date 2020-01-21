@@ -1,7 +1,7 @@
 # dockerize-symfony
 Dockerize Symfony development stack (PHP, Yarn, Nginx, DB)
 
-# Install
+# Install & Update
 
 ```
 $ wget https://raw.githubusercontent.com/Nattfarinn/dockerize-symfony/master/dockerize -O /usr/local/bin/dockerize && chmod +x /usr/local/bin/dockerize
