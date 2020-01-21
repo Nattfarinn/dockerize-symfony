@@ -31,6 +31,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "-h", "--vhost",
+    type=str,
+    nargs="?",
+    help="Virtual host base name, without env and TLD (default: {repository_name})",
+)
+
+parser.add_argument(
     "--php-version",
     metavar="VER",
     default=PHP_VERSION,
@@ -107,6 +114,9 @@ repository_name = args.source \
 
 if not args.target:
     args.target = "./%s.docker" % repository_name
+
+if not args.vhost:
+    args.vhost = repository_name
 
 if args.force:
     os.system("rm -Rf %s" % args.target) == 0 or exit(255)
