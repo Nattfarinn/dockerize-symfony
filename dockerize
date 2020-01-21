@@ -31,7 +31,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "-h", "--vhost",
+    "-v", "--vhost",
     type=str,
     nargs="?",
     help="Virtual host base name, without env and TLD (default: {repository_name})",
