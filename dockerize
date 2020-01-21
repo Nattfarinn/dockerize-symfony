@@ -262,3 +262,5 @@ os.system("git clone %s %s" % (args.source, repository_name))
 file_handle = open("%s/.env.local" % repository_name, "w+")
 file_handle.write("DATABASE_URL=%s" % DATABASE_URL[args.db_engine])
 file_handle.close()
+
+os.system("touch %s/.composer/auth.json" % HOME_DIRECTORY)
