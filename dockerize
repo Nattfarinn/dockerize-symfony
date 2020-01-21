@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+
+import os
+import argparse
+
+HOME_DIRECTORY = os.path.expanduser("~")
+
+PHP_VERSION = "7.3"
+DB_ENGINE = "postgres"
+DB_VERSION = "latest"
+PROXY_NETWORK = "proxy"
+SSH_PATH = HOME_DIRECTORY + os.path.sep + ".ssh"
+TLD = "test"
+
+parser = argparse.ArgumentParser(
+    description="Prepare Docker stack environment for Symfony application",
+)
+
+parser.add_argument(
+    "source",
+    type=str,
+    nargs=1,
+    help="repository to be cloned"
+)
+
+parser.add_argument(
+    "target",
+    type=str,
+    nargs="?",
+    help="target directory and path (default: ./{repository_name}.docker)"
+)
+
+parser.add_argument(
+    "--php-version",
+    metavar="VER",
+    default=PHP_VERSION,
+    type=str,
+    nargs="?",
+    help="PHP version (default: %s)" % PHP_VERSION
+)
+
+parser.add_argument(
+    "--db-engine",
+    metavar="ENGINE",
+    default=DB_ENGINE,
+    choices=("mysql", "postgres"),
+    type=str,
+    nargs="?",
+    help="Database engine (default: %s)" % DB_ENGINE
+)
+
+parser.add_argument(
+    "--db-version",
+    metavar="VER",
+    default=DB_VERSION,
+    type=str,
+    nargs="?",
+    help="Database version (default: %s)" % DB_VERSION
+)
+
+parser.add_argument(
+    "--network",
+    metavar="NETWORK",
+    default=PROXY_NETWORK,
+    type=str,
+    nargs="?",
+    help="Docker external network to be shared with jwilder/nginx-proxy (default: %s)" % PROXY_NETWORK,
+)
+
+parser.add_argument(
+    "--tld",
+    metavar="TLD",
+    default=TLD,
+    type=str,
+    nargs="?",
+    help="Top-level domain to be used for vhost creation " +
+         "(default: %(tld)s, example: repository_name.dev.%(tld)s)" % {"tld": TLD}
+)
+
+parser.add_argument(
+    "--ssh-path",
+    metavar="SSH",
+    default=SSH_PATH,
+    type=str,
+    nargs="?",
+    help="Local SSH directory to be mounted with application containers (default: %s)" % SSH_PATH,
+)
+
+parser.add_argument(
+    "-x", "--xdebug",
+    action="store_true",
+    help="Setup additional XDebug docker service"
+)
+
+parser.add_argument(
+    "-f", "--force",
+    action="store_true",
+    help="Overwrite target content if exists (involves rm -Rf on target path, use with caution!)"
+)
+
+args = parser.parse_args()
+args.source = args.source[0]
+
+repository_name = args.source \
+    .split("/")[-1] \
+    .split(".git")[0]
+
+if not args.target:
+    args.target = "./%s.docker" % repository_name
+
+if args.force:
+    os.system("rm -Rf %s" % args.target) == 0 or exit(255)
+    os.system("mkdir -p %s" % args.target) == 0 or exit(255)
+else:
+    result = os.system("mkdir %s" % args.target) == 0 or exit(255)
+
+os.chdir(args.target)
+os.system("mkdir %s" % repository_name) == 0 or exit(255)
+
+DATABASE_URL = {
+    "postgres": "pgsql://database:database@database:5432/database?charSet=UTF-8",
+    "mysql": "mysql://database:database@database:3306/database",
+}
+
+DATABASE_VOLUME = {
+    "postgres": "/var/lib/postgresql/data",
+    "mysql": "/var/lib/mysql",
+}
+
+DATABASE_ENVS = {
+    "postgres": ("USER", "PASSWORD", "DB"),
+    "mysql": ("USER", "PASSWORD", "DATABASE"),
+}
+
+DOCKER_COMPOSE_PHP_SERVICE = """%(name)s:
+        container_name: %(repository_name)s.docker
+        image: nattfarinn/symfony-application:php-%(php_version)s%(php_version_flag)s
+        user: www-data
+        links:
+            - %(database_name)s
+        volumes:
+            - source:/var/www/html
+            - composer:/home/www-data/.composer
+            - %(home_directory)s/.composer/auth.json:/home/www-data/.composer/auth.json
+            - %(ssh_path)s:/home/www-data/.ssh"""
+
+DOCKER_COMPOSE_NGINX_SERVICE = """%(name)s:
+        image: nattfarinn/symfony-webserver:latest
+        environment:
+            - VIRTUAL_HOST=%(vhosts)s
+        links:
+            - %(application_name)s
+        volumes:
+            - source:/var/www/html"""
+
+DOCKER_COMPOSE_DB_SERVICE = """%(name)s:
+        image: %(db_engine)s:%(db_version)s
+        env_file:
+            - .%(db_engine)s.env
+        volumes:
+            - database:%(db_volume)s"""
+
+DOCKER_COMPOSE_FILE = """version: "3"
+
+services:
+    %(application_webserver)s
+    %(application)s
+    %(database)s
+    %(xdebug_webserver)s
+    %(xdebug)s
+
+volumes:
+    source:
+    composer:
+    database:
+
+networks:
+    default:
+        external:
+            name: %(proxy_network)s
+"""
+
+MUTAGEN_FILE = """sync:
+    source:
+        alpha: "./%(repository_name)s"
+        beta: "docker://www-data@%(repository_name)s.docker/var/www/html"
+        mode: "two-way-resolved"
+        configurationBeta:
+            permissions:
+                defaultFileMode: "644"
+                defaultDirectoryMode: "755"
+        ignore:
+            paths:
+                - ".idea/"
+                - "var/"
+                - "vendor/**/vendor/"
+"""
+
+docker_compose_file_content = DOCKER_COMPOSE_FILE % {
+    "application_webserver": DOCKER_COMPOSE_NGINX_SERVICE % {
+        "name": "webserver",
+        "application_name": "application",
+        "repository_name": repository_name,
+        "vhosts": "%(repository_name)s.dev.%(tld)s,%(repository_name)s.prod.%(tld)s" % {
+            "repository_name": repository_name,
+            "tld": args.tld,
+        },
+    },
+    "application": DOCKER_COMPOSE_PHP_SERVICE % {
+        "name": "application",
+        "repository_name": repository_name,
+        "database_name": "database",
+        "php_version": args.php_version,
+        "php_version_flag": "",
+        "ssh_path": args.ssh_path,
+        "home_directory": HOME_DIRECTORY,
+    },
+    "xdebug_webserver": "# Without: XDebug webserver" if not args.xdebug else DOCKER_COMPOSE_NGINX_SERVICE % {
+        "name": "webserver_xdebug",
+        "application_name": "xdebug",
+        "xdebug_name": "xdebug",
+        "vhosts": "%(repository_name)s.xdebug.%(tld)s" % {
+            "repository_name": repository_name,
+            "tld": args.tld,
+        },
+    },
+    "xdebug": "# Without: XDebug application" if not args.xdebug else DOCKER_COMPOSE_PHP_SERVICE % {
+        "name": "xdebug",
+        "repository_name": repository_name,
+        "database_name": "database",
+        "php_version": args.php_version,
+        "php_version_flag": "-xdebug",
+        "ssh_path": args.ssh_path,
+    },
+    "database": DOCKER_COMPOSE_DB_SERVICE % {
+        "name": "database",
+        "db_engine": args.db_engine,
+        "db_version": args.db_version,
+        "db_volume": DATABASE_VOLUME[args.db_engine],
+    },
+    "proxy_network": args.network,
+}
+
+mutagen_file_content = MUTAGEN_FILE % {
+    "repository_name": repository_name,
+}
+
+file_handle = open("docker-compose.yml", "w+")
+file_handle.write(docker_compose_file_content)
+file_handle.close()
+
+file_handle = open("mutagen.yml", "w+")
+file_handle.write(mutagen_file_content)
+file_handle.close()
+
+file_handle = open(".%s.env" % args.db_engine, "w+")
+file_handle.writelines(["%s_%s=database\n" % (args.db_engine.upper(), variable) for variable in DATABASE_ENVS[args.db_engine]])
+file_handle.close()
+
+#os.system("git clone %s %s" % (args.source, repository_name))
+
+file_handle = open("%s/.env.local" % repository_name, "w+")
+file_handle.write("DATABASE_URL=%s" % DATABASE_URL[args.db_engine])
+file_handle.close()
