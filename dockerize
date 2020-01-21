@@ -31,7 +31,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "-v", "--vhost",
+    "--vhost",
     type=str,
     nargs="?",
     help="Virtual host base name, without env and TLD (default: {repository_name})",
@@ -211,8 +211,8 @@ docker_compose_file_content = DOCKER_COMPOSE_FILE % {
         "name": "webserver",
         "application_name": "application",
         "repository_name": repository_name,
-        "vhosts": "%(repository_name)s.dev.%(tld)s,%(repository_name)s.prod.%(tld)s" % {
-            "repository_name": repository_name,
+        "vhosts": "%(vhost)s.dev.%(tld)s,%(vhost)s.prod.%(tld)s" % {
+            "vhost": args.vhost,
             "tld": args.tld,
         },
     },
@@ -229,8 +229,8 @@ docker_compose_file_content = DOCKER_COMPOSE_FILE % {
         "name": "webserver_xdebug",
         "application_name": "xdebug",
         "xdebug_name": "xdebug",
-        "vhosts": "%(repository_name)s.xdebug.%(tld)s" % {
-            "repository_name": repository_name,
+        "vhosts": "%(vhost)s.xdebug.%(tld)s" % {
+            "vhost": args.vhost,
             "tld": args.tld,
         },
     },
