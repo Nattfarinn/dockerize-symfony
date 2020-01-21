@@ -143,7 +143,7 @@ DATABASE_ENVS = {
 }
 
 DOCKER_COMPOSE_PHP_SERVICE = """%(name)s:
-        container_name: %(repository_name)s.docker
+        container_name: %(repository_name)s__%(vhost)s.docker
         image: nattfarinn/symfony-application:php-%(php_version)s%(php_version_flag)s
         user: www-data
         links:
@@ -193,7 +193,7 @@ networks:
 MUTAGEN_FILE = """sync:
     source:
         alpha: "./%(repository_name)s"
-        beta: "docker://www-data@%(repository_name)s.docker/var/www/html"
+        beta: "docker://www-data@%(repository_name)s__%(vhost)s.docker/var/www/html"
         mode: "two-way-resolved"
         configurationBeta:
             permissions:
@@ -224,6 +224,7 @@ docker_compose_file_content = DOCKER_COMPOSE_FILE % {
         "php_version_flag": "",
         "ssh_path": args.ssh_path,
         "home_directory": HOME_DIRECTORY,
+        "vhost": args.vhost,
     },
     "xdebug_webserver": "# Without: XDebug webserver" if not args.xdebug else DOCKER_COMPOSE_NGINX_SERVICE % {
         "name": "webserver_xdebug",
@@ -241,6 +242,7 @@ docker_compose_file_content = DOCKER_COMPOSE_FILE % {
         "php_version": args.php_version,
         "php_version_flag": "-xdebug",
         "ssh_path": args.ssh_path,
+        "vhost": args.vhost,
     },
     "database": DOCKER_COMPOSE_DB_SERVICE % {
         "name": "database",
@@ -253,6 +255,7 @@ docker_compose_file_content = DOCKER_COMPOSE_FILE % {
 
 mutagen_file_content = MUTAGEN_FILE % {
     "repository_name": repository_name,
+    "vhost": args.vhost,
 }
 
 file_handle = open("docker-compose.yml", "w+")
