@@ -242,6 +242,7 @@ docker_compose_file_content = DOCKER_COMPOSE_FILE % {
         "php_version": args.php_version,
         "php_version_flag": "-xdebug",
         "ssh_path": args.ssh_path,
+        "home_directory": HOME_DIRECTORY,
         "vhost": args.vhost,
     },
     "database": DOCKER_COMPOSE_DB_SERVICE % {
