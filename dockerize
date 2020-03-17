@@ -2,14 +2,23 @@
 
 import os
 import argparse
+import json
 
 HOME_DIRECTORY = os.path.expanduser("~")
+
+COMPOSER = {
+    'AUTH_USERNAME': '',
+    'AUTH_PASSWORD': '',
+    'GITHUB_TOKEN': '',
+    'AUTH_SERVICE': '',
+}
 
 PHP_VERSION = "7.3"
 DB_ENGINE = "postgres"
 DB_VERSION = "latest"
 PROXY_NETWORK = "proxy"
 SSH_PATH = HOME_DIRECTORY + os.path.sep + ".ssh"
+COMPOSER_PATH = HOME_DIRECTORY + os.path.sep + ".composer"
 TLD = "test"
 
 parser = argparse.ArgumentParser(
@@ -146,12 +155,13 @@ DOCKER_COMPOSE_PHP_SERVICE = """%(name)s:
         container_name: %(repository_name)s_%(container_name_interfix)s_%(vhost)s.docker
         image: nattfarinn/symfony-application:php-%(php_version)s%(php_version_flag)s
         user: www-data
+        environment:
+            - COMPOSER_AUTH=${COMPOSER_AUTH}
         links:
             - %(database_name)s
         volumes:
             - source:/var/www/html
             - composer:/home/www-data/.composer
-            - %(home_directory)s/.composer/auth.json:/home/www-data/.composer/auth.json
             - %(ssh_path)s:/home/www-data/.ssh"""
 
 DOCKER_COMPOSE_NGINX_SERVICE = """%(name)s:
@@ -195,6 +205,8 @@ MUTAGEN_FILE = """sync:
         alpha: "./%(repository_name)s"
         beta: "docker://www-data@%(repository_name)s_%(container_name_interfix)s_%(vhost)s.docker/var/www/html"
         mode: "two-way-resolved"
+        symlink:
+            mode: "ignore"
         configurationBeta:
             permissions:
                 defaultFileMode: "644"
@@ -203,7 +215,7 @@ MUTAGEN_FILE = """sync:
             paths:
                 - ".idea/"
                 - "var/"
-                - "vendor/**/vendor/"
+                - "vendor/*/*/vendor/"
 """
 
 docker_compose_file_content = DOCKER_COMPOSE_FILE % {
@@ -262,6 +274,18 @@ mutagen_file_content = MUTAGEN_FILE % {
     "vhost": args.vhost,
 }
 
+with open(COMPOSER_PATH + os.path.sep + "auth.json") as handle:
+    composer_auth = json.load(handle)
+    if "github-oauth" in composer_auth and "github.com" in composer_auth["github-oauth"]:
+        COMPOSER["GITHUB_TOKEN"] = composer_auth["github-oauth"]["github.com"]
+    if "http-basic" in composer_auth and len(composer_auth["http-basic"]) > 0:
+        service = next(iter(composer_auth["http-basic"]))
+        COMPOSER["AUTH_SERVICE"] = service
+        if "username" in composer_auth["http-basic"][service]:
+            COMPOSER["AUTH_USERNAME"] = composer_auth["http-basic"][service]["username"]
+        if "password" in composer_auth["http-basic"][service]:
+            COMPOSER["AUTH_PASSWORD"] = composer_auth["http-basic"][service]["password"]
+
 file_handle = open("docker-compose.yml", "w+")
 file_handle.write(docker_compose_file_content)
 file_handle.close()
@@ -272,6 +296,15 @@ file_handle.close()
 
 file_handle = open(".%s.env" % args.db_engine, "w+")
 file_handle.writelines(["%s_%s=database\n" % (args.db_engine.upper(), variable) for variable in DATABASE_ENVS[args.db_engine]])
+file_handle.close()
+
+file_handle = open(".env", "w+")
+file_handle.write("COMPOSER_AUTH={'github-oauth': {'github.com': '%s'}, 'http-basic': {'%s': {'username': '%s', 'password': '%s'}}}\n" % (
+    COMPOSER["GITHUB_TOKEN"],
+    COMPOSER["AUTH_SERVICE"],
+    COMPOSER["AUTH_USERNAME"],
+    COMPOSER["AUTH_PASSWORD"],
+))
 file_handle.close()
 
 os.system("git clone %s %s" % (args.source, repository_name))
