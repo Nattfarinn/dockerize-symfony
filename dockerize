@@ -141,6 +141,11 @@ DATABASE_URL = {
     "mysql": "mysql://database:database@database:3306/database",
 }
 
+DATABASE_ENCODING = {
+    "postgres": "utf8",
+    "mysql": "utf8mb4",
+}
+
 DATABASE_VOLUME = {
     "postgres": "/var/lib/postgresql/data",
     "mysql": "/var/lib/mysql",
@@ -311,6 +316,7 @@ os.system("git clone %s %s" % (args.source, repository_name))
 
 file_handle = open("%s/.env.local" % repository_name, "w+")
 file_handle.write("DATABASE_URL=%s" % DATABASE_URL[args.db_engine])
+file_handle.write("DATABASE_CHARSET=%s" % DATABASE_CHARSET[args.db_engine])
 file_handle.close()
 
 os.system("touch %s/.composer/auth.json" % HOME_DIRECTORY)
